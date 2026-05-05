@@ -1,0 +1,491 @@
+<!DOCTYPE html>
+<html lang="pt-pt">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Treino Master - Coach IA Pro</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    
+    <!-- Firebase SDK -->
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800;900&display=swap');
+        body { font-family: 'Inter', sans-serif; -webkit-tap-highlight-color: transparent; overscroll-behavior-y: contain; }
+        .scrollbar-hide::-webkit-scrollbar { display: none; }
+        .animate-in { animation: slideUp 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+        @keyframes slideUp { from { transform: translateY(20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+        .glass { backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); }
+    </style>
+</head>
+<body class="bg-slate-50 dark:bg-slate-950">
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect, useMemo, useCallback } = React;
+
+        // --- DATABASE OFICIAL ---
+        const EXERCISE_DB = {
+            "Superior A": ["Floor YTW", "Supino Halteres", "Standard Push-up", "Desenvolvimento Ombros", "Tríceps Corda"],
+            "Inferior A": ["Agachamento Livre", "Leg Press", "Cadeira Extensora", "Panturrilha Sentado", "Bike Ergométrica"],
+            "Superior B": ["Puxada Alta", "Remada Curvada", "Bíceps Rosca Direta", "Face Pull", "Caminhada Inclinada"],
+            "Inferior B": ["Stiff", "Cadeira Flexora", "Agachamento Sumô", "Abdominal Infra", "Plank"],
+            "Histórico": ["Supino Reto (Halteres)", "Remada Curvada com Barra", "Puxada Alta Frente", "Elevação Lateral", "Rosca Inversa", "Graviton", "Paralela", "Afundo"]
+        };
+
+        const WEEKLY_ROUTINE = {
+            "Segunda": "Superior A", "Terça": "Inferior A", "Quarta": "Superior B",
+            "Quinta": "Inferior B", "Sexta": "Superior A", "Sábado": "Cardio", "Domingo": "Descanso"
+        };
+
+        // --- ICON LIBRARY (SVG) ---
+        const Icon = ({ name, size = 20, className = "" }) => {
+            const icons = {
+                dashboard: <path d="M3 3h7v9H3V3zm11 0h7v5h-7V3zm0 9h7v9h-7v-9zM3 16h7v5H3v-5z"/>,
+                plus: <path d="M12 5v14M5 12h14"/>,
+                scale: <path d="M16 16c3.314 0 6-2.686 6-6V4h-4v6c0 1.105-.895 2-2 2s-2-.895-2-2V4h-4v6c0 3.314 2.686 6 6 6zM6 16c-3.314 0-6-2.686-6-6V4h4v6c0 1.105.895 2 2 2s2-.895 2-2V4h4v6c0 3.314-2.686 6-6 6zM12 22v-6"/>,
+                trophy: <path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6m12 5h1.5a2.5 2.5 0 0 0 0-5H18M12 22h4m-8 0h4m0 0V13m0 0a4 4 0 0 1-4-4V4h8v5a4 4 0 0 1-4 4z"/>,
+                brain: <path d="M9.5 2A5.5 5.5 0 0 0 4 7.5c0 1.63.71 3.1 1.83 4.12.56.51.85 1.25.77 2L6.23 17a2 2 0 0 0 2 2.33h7.54a2 2 0 0 0 2-2.33l-.37-3.38c-.08-.75.21-1.49.77-2a5.5 5.5 0 1 0-8.67-7.62zM9 13l3-3 3 3M12 10v10"/>,
+                trash: <path d="M3 6h18m-2 0v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>,
+                chevron: <path d="M15 18l-6-6 6-6"/>,
+                zap: <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>,
+                utensils: <path d="M3 2v7c0 1.1.9 2 2 2h4a2 2 0 0 0 2-2V2M7 2v20M21 15V2v0a5 5 0 0 0-5 5v6c0 1.1.9 2 2 2h3zm0 0v7"/>
+            };
+            return (
+                <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className={className}>
+                    {icons[name] || null}
+                </svg>
+            );
+        };
+
+        function App() {
+            const [view, setView] = useState('dashboard');
+            const [user, setUser] = useState(null);
+            const [workouts, setWorkouts] = useState([]);
+            const [weightLogs, setWeightLogs] = useState([{ id: 1, date: "2026-05-04", value: 94.6 }]);
+            const [dailySuggestion, setDailySuggestion] = useState(null);
+            const [isSyncing, setIsSyncing] = useState(false);
+            const [aiLoading, setAiLoading] = useState(false);
+            const [weightInput, setWeightInput] = useState('');
+            const [aiRecs, setAiRecs] = useState({});
+            const [mealSuggestion, setMealSuggestion] = useState("");
+            const [performanceInsight, setPerformanceInsight] = useState("");
+
+            const [currentLog, setCurrentLog] = useState({ date: new Date().toISOString().split('T')[0], type: '', exercises: [] });
+
+            const currentWeight = useMemo(() => Number(weightLogs[0]?.value) || 94.6, [weightLogs]);
+
+            // --- GEMINI API ENGINE ---
+            const askGemini = async (prompt, systemPrompt, retryCount = 0) => {
+                const apiKey = "";
+                const model = "gemini-2.5-flash-preview-09-2025";
+                const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+
+                try {
+                    const response = await fetch(url, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            contents: [{ parts: [{ text: prompt }] }],
+                            systemInstruction: { parts: [{ text: systemPrompt }] }
+                        })
+                    });
+                    const data = await response.json();
+                    const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+                    if (!text) throw new Error("Resposta IA vazia");
+                    return text.replace(/```json|```/g, "").trim();
+                } catch (e) {
+                    if (retryCount < 4) {
+                        const delay = Math.pow(2, retryCount) * 1000;
+                        await new Promise(r => setTimeout(r, delay));
+                        return askGemini(prompt, systemPrompt, retryCount + 1);
+                    }
+                    return null;
+                }
+            };
+
+            // --- FEATURES IA ---
+            const generateDailyStrategy = async () => {
+                setAiLoading(true);
+                const hoje = new Date().toLocaleDateString('pt-PT', { weekday: 'long' });
+                const diaLimpo = hoje.charAt(0).toUpperCase() + hoje.slice(1).split('-')[0];
+                const baseType = WEEKLY_ROUTINE[diaLimpo] || "Treino Livre";
+                
+                const sys = "Atua como um Coach de Elite. Cria um plano de treino focado em hipertrofia e força. Responde apenas em JSON.";
+                const query = `Gera o treino para hoje (${hoje}). Rotina Base: ${baseType}. Peso: ${currentWeight}kg. Retorna apenas este JSON: {"type": "${baseType}", "strategy": "uma frase curta de motivação", "plan": [{"name": "Exercício", "sets": 3, "reps": 12}]}`;
+                
+                const res = await askGemini(query, sys);
+                if(res) setDailySuggestion(JSON.parse(res));
+                setAiLoading(false);
+            };
+
+            const getLoadRecommendation = async (exName) => {
+                setAiRecs(prev => ({ ...prev, [exName]: { loading: true } }));
+                const history = workouts.flatMap(w => w.exercises?.filter(e => e.name === exName).map(e => ({ ...e, date: w.date }))).slice(0, 3);
+                
+                const sys = "Analista de performance de força. Sugere carga adicional baseada no histórico. Responde JSON.";
+                const query = `Histórico de ${exName}: ${JSON.stringify(history)}. O aluno pesa ${currentWeight}kg. Sugere a carga extra (kg) ideal para a próxima série. JSON: {"weight": number, "reason": "string"}`;
+                
+                const res = await askGemini(query, sys);
+                if(res) setAiRecs(prev => ({ ...prev, [exName]: { ...JSON.parse(res), loading: false } }));
+            };
+
+            const getNutritionTip = async () => {
+                setAiLoading(true);
+                const sys = "Nutricionista Desportivo. Sugere refeições pré e pós treino baseadas no tipo de treino. Resposta curta em PT-PT.";
+                const query = `Vou treinar ${dailySuggestion?.type || "Musculação"}. Peso ${currentWeight}kg. O que devo comer antes e depois?`;
+                const res = await askGemini(query, sys);
+                if(res) setMealSuggestion(res);
+                setAiLoading(false);
+            };
+
+            const getPerformanceInsight = async () => {
+                setAiLoading(true);
+                const sys = "Analista de Dados de Fitness. Analisa a tendência de volume e dá um feedback técnico.";
+                const query = `Aqui estão os meus últimos treinos: ${JSON.stringify(workouts.slice(0, 5))}. Como está a minha evolução de volume total? Dá-me uma dica técnica.`;
+                const res = await askGemini(query, sys);
+                if(res) setPerformanceInsight(res);
+                setAiLoading(false);
+            };
+
+            // --- FIREBASE SYNC ---
+            useEffect(() => {
+                const config = window.__firebase_config ? JSON.parse(window.__firebase_config) : { apiKey: "" };
+                if (config.apiKey) {
+                    firebase.initializeApp(config);
+                    firebase.auth().signInAnonymously();
+                    firebase.auth().onAuthStateChanged(u => {
+                        setUser(u);
+                        if(u) {
+                            const db = firebase.firestore();
+                            const appId = window.__app_id || 'treino-master-v14';
+                            db.collection('artifacts').doc(appId).collection('users').doc(u.uid).collection('workouts')
+                                .onSnapshot(s => setWorkouts(s.docs.map(d => d.data()).sort((a,b) => new Date(b.date) - new Date(a.date))));
+                            db.collection('artifacts').doc(appId).collection('users').doc(u.uid).collection('weights')
+                                .onSnapshot(s => {
+                                    const data = s.docs.map(d => d.data()).sort((a,b) => new Date(b.date) - new Date(a.date));
+                                    if(data.length > 0) setWeightLogs(data);
+                                });
+                        }
+                    });
+                } else {
+                    setUser({ uid: "local-user" });
+                }
+            }, []);
+
+            useEffect(() => { if(user) generateDailyStrategy(); }, [user]);
+
+            // --- CALCULATOR LOGIC ---
+            const getBwMult = (name) => {
+                const n = name.toLowerCase();
+                if(n.includes('agachamento livre') || n.includes('plank') || n.includes('prancha') || n.includes('dips') || n.includes('paralela')) return 1.0;
+                if(n.includes('diamante')) return 0.7;
+                if(n.includes('flexão') || n.includes('push-up')) return 0.6;
+                return 0;
+            };
+
+            const addExercise = (name) => {
+                const last = workouts.find(w => w.exercises?.some(e => e.name === name))?.exercises.find(e => e.name === name);
+                const sets = last ? last.sets.map((s, i) => ({ ...s, setId: Date.now() + i })) : 
+                             Array.from({length: 3}).map((_, i) => ({ setId: Date.now() + i, reps: 10, weight: 0, rpe: 7, tech: 4, unit: 'reps' }));
+                
+                setCurrentLog(prev => ({
+                    ...prev,
+                    exercises: [...prev.exercises, { id: Date.now() + Math.random(), name, sets, lastLabel: last ? `${last.sets[0].weight}kg x ${last.sets[0].reps}` : "Sem histórico" }]
+                }));
+            };
+
+            const saveWorkout = async () => {
+                if(!currentLog.type || !user) return;
+                setIsSyncing(true);
+                const volume = currentLog.exercises.reduce((acc, ex) => {
+                    const bwBase = getBwMult(ex.name) * currentWeight;
+                    return acc + ex.sets.reduce((sAcc, s) => sAcc + (Number(s.reps) * (bwBase + Number(s.weight))), 0);
+                }, 0);
+
+                const data = { ...currentLog, id: Date.now(), volume };
+                if(user.uid !== "local-user") {
+                    await firebase.firestore().collection('artifacts').doc(window.__app_id || 'treino-master-v14').collection('users').doc(user.uid).collection('workouts').doc(data.id.toString()).set(data);
+                }
+                setView('dashboard');
+                setCurrentLog({ date: new Date().toISOString().split('T')[0], type: '', exercises: [] });
+                setIsSyncing(false);
+            };
+
+            return (
+                <div className="max-w-xl mx-auto min-h-screen px-4 pt-6 pb-32 overflow-x-hidden">
+                    
+                    {/* Header */}
+                    <header className="flex justify-between items-center mb-8">
+                        <div>
+                            <h1 className="text-2xl font-black italic tracking-tighter">COACH IA <span className="text-blue-600">PRO</span></h1>
+                            <div className="flex items-center gap-2 mt-1">
+                                {isSyncing ? <span className="text-[9px] font-bold text-blue-500 animate-pulse uppercase">Syncing Cloud...</span> : <span className="text-[9px] font-bold text-green-500 uppercase flex items-center gap-1"><span className="w-1.5 h-1.5 bg-green-500 rounded-full"></span> Nuvem Ativa</span>}
+                            </div>
+                        </div>
+                        <div className="flex gap-2">
+                             <button onClick={() => setView('prs')} className="p-3 bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-800 text-yellow-500 active:scale-90 transition-all"><Icon name="trophy"/></button>
+                        </div>
+                    </header>
+
+                    {view === 'dashboard' && (
+                        <div className="space-y-6 animate-in">
+                            {/* AI Strategy Card */}
+                            <div className="bg-gradient-to-br from-indigo-700 to-blue-800 rounded-[2.5rem] p-8 text-white shadow-2xl relative overflow-hidden">
+                                <Icon name="brain" size={160} className="absolute -right-12 -top-12 text-white/10" />
+                                <div className="relative z-10">
+                                    <h2 className="text-2xl font-black tracking-tight">{dailySuggestion?.type || (aiLoading ? "Consultando o Coach..." : "Pronto para o Treino?")}</h2>
+                                    <p className="text-[10px] font-bold text-indigo-200 uppercase tracking-widest mb-4">Estratégia Recomendada IA ✨</p>
+                                    
+                                    {dailySuggestion?.strategy && <p className="text-sm italic opacity-80 mb-6 border-l-2 border-blue-400 pl-3">"{dailySuggestion.strategy}"</p>}
+
+                                    {dailySuggestion?.plan && (
+                                        <div className="space-y-2 mb-8 bg-black/10 rounded-2xl p-4">
+                                            {dailySuggestion.plan.map((ex, i) => (
+                                                <div key={i} className="flex justify-between text-xs border-b border-white/5 pb-1 last:border-0">
+                                                    <span className="font-semibold">{ex.name}</span>
+                                                    <span className="font-black text-indigo-200">{ex.sets}x{ex.reps}</span>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
+
+                                    <div className="grid grid-cols-2 gap-3">
+                                        <button 
+                                            onClick={() => {
+                                                const mapped = dailySuggestion.plan.map(p => ({
+                                                    id: Math.random(), name: p.name, 
+                                                    sets: Array.from({length: p.sets}).map((_, i) => ({ setId: Date.now()+i, reps: p.reps, weight: 0, rpe: 7, tech: 4, unit: 'reps' }))
+                                                }));
+                                                setCurrentLog({...currentLog, type: dailySuggestion.type, exercises: mapped});
+                                                setView('log-workout');
+                                            }}
+                                            className="py-4 bg-white text-indigo-800 rounded-2xl font-black uppercase tracking-wider text-xs shadow-xl active:scale-95 transition-all"
+                                        >
+                                            Iniciar Treino
+                                        </button>
+                                        <button onClick={getNutritionTip} className="py-4 bg-indigo-600/30 text-white rounded-2xl font-bold uppercase tracking-wider text-[10px] border border-white/10 active:scale-95 transition-all flex items-center justify-center gap-2">
+                                            <Icon name="utensils" size={16}/> Nutrição
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Nutrition Insight Card */}
+                            {mealSuggestion && (
+                                <div className="bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-100 dark:border-emerald-800 rounded-[2rem] p-5 animate-in">
+                                    <div className="flex items-center gap-2 text-emerald-700 dark:text-emerald-400 font-black text-xs uppercase mb-2"><Icon name="utensils" size={14}/> Sugestão IA Coach Nutri ✨</div>
+                                    <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed whitespace-pre-wrap">{mealSuggestion}</p>
+                                    <button onClick={() => setMealSuggestion("")} className="mt-3 text-[9px] font-black uppercase text-emerald-600">Fechar</button>
+                                </div>
+                            )}
+
+                            {/* Performance Analysis */}
+                            <div className="bg-white dark:bg-slate-900 p-6 rounded-[2.5rem] border border-slate-100 dark:border-slate-800 shadow-sm space-y-4">
+                                <div className="flex justify-between items-center">
+                                    <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest">Performance Insights ✨</h3>
+                                    <button onClick={getPerformanceInsight} className="text-[10px] font-black text-blue-600 uppercase hover:underline">Analisar Agora</button>
+                                </div>
+                                {performanceInsight ? (
+                                    <div className="bg-slate-50 dark:bg-slate-800 p-4 rounded-2xl text-xs italic text-slate-500 leading-relaxed animate-in">"{performanceInsight}"</div>
+                                ) : (
+                                    <p className="text-[10px] text-slate-400 italic">O Coach ainda não analisou os teus dados recentes. Clica em analisar para receberes feedback técnico.</p>
+                                )}
+                            </div>
+
+                            {/* Recent Activity */}
+                            <div className="space-y-3">
+                                <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest ml-2">Atividade Recente</h3>
+                                {workouts.slice(0, 5).map(w => (
+                                    <div key={w.id} className="flex justify-between p-5 bg-white dark:bg-slate-900 rounded-[2rem] border border-slate-100 dark:border-slate-800 shadow-sm active:scale-[0.98] transition-transform">
+                                        <div>
+                                            <p className="font-bold text-sm">{w.type}</p>
+                                            <p className="text-[10px] text-slate-400 font-bold uppercase">{new Date(w.date).toLocaleDateString()}</p>
+                                        </div>
+                                        <div className="text-right">
+                                            <span className="text-blue-600 font-black text-sm">+{Math.round(w.volume).toLocaleString()}kg</span>
+                                            <p className="text-[8px] font-bold text-slate-400 uppercase">Volume Real</p>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+
+                    {view === 'log-workout' && (
+                        <div className="space-y-6 animate-in">
+                            <div className="flex items-center gap-4 px-1">
+                                <button onClick={() => setView('dashboard')} className="p-2 bg-slate-100 dark:bg-slate-800 rounded-xl active:scale-90"><Icon name="chevron"/></button>
+                                <h1 className="text-xl font-black uppercase tracking-tight">Registar Sessão</h1>
+                            </div>
+
+                            <div className="bg-white dark:bg-slate-900 p-6 rounded-[2.5rem] shadow-sm border border-slate-100 dark:border-slate-800 space-y-4">
+                                <input type="text" className="w-full text-xl font-black bg-transparent border-none focus:ring-0 p-0" placeholder="Título do Treino" value={currentLog.type} onChange={e => setCurrentLog({...currentLog, type: e.target.value})} />
+                                <div className="grid grid-cols-2 gap-4">
+                                    <input type="date" className="w-full p-3 bg-slate-50 dark:bg-slate-800 rounded-2xl text-xs font-bold border-none" value={currentLog.date} onChange={e => setCurrentLog({...currentLog, date: e.target.value})} />
+                                    <div className="bg-blue-50 dark:bg-blue-900/20 rounded-2xl p-3 text-center border border-blue-100 dark:border-blue-900/50">
+                                        <p className="text-[8px] font-bold text-blue-500 uppercase mb-1">Impacto Peso</p>
+                                        <p className="text-xs font-black">{currentWeight}kg</p>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {currentLog.exercises.map(ex => {
+                                const bwBase = getBwMult(ex.name) * currentWeight;
+                                return (
+                                    <div key={ex.id} className="bg-white dark:bg-slate-900 p-6 rounded-[2rem] border-l-4 border-blue-600 shadow-sm space-y-5 animate-in">
+                                        <div className="flex justify-between items-start">
+                                            <div>
+                                                <h4 className="font-black text-sm">{ex.name}</h4>
+                                                <div className="flex gap-1.5 mt-1">
+                                                    <span className="text-[9px] text-blue-500 font-bold uppercase bg-blue-50 dark:bg-blue-900/30 px-2 py-0.5 rounded-lg">{ex.lastInfo}</span>
+                                                    {bwBase > 0 && <span className="text-[9px] text-slate-400 font-bold uppercase bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded-lg">Base: +{bwBase.toFixed(1)}kg</span>}
+                                                </div>
+                                            </div>
+                                            <div className="flex gap-2">
+                                                <button onClick={() => getLoadRecommendation(ex.name)} className="p-2.5 bg-indigo-50 dark:bg-indigo-900/40 text-indigo-600 rounded-2xl active:scale-90"><Icon name="brain" size={18}/></button>
+                                                <button onClick={() => setCurrentLog({...currentLog, exercises: currentLog.exercises.filter(e => e.id !== ex.id)})} className="p-2.5 bg-red-50 text-red-400 rounded-2xl active:scale-90"><Icon name="trash" size={18}/></button>
+                                            </div>
+                                        </div>
+
+                                        {aiRecs[ex.name] && (
+                                            <div className="p-4 bg-indigo-50 dark:bg-indigo-900/40 rounded-3xl border border-indigo-100 dark:border-indigo-800 text-[10px] text-indigo-700 dark:text-indigo-200 italic relative overflow-hidden">
+                                                {aiRecs[ex.name].loading ? <div className="flex items-center gap-2 animate-pulse"><Icon name="zap" size={12}/> Analisando performance...</div> : (
+                                                    <div className="relative">
+                                                        <Icon name="zap" size={10} className="absolute -left-1 -top-1 text-yellow-500 fill-yellow-500" />
+                                                        <p className="font-black mb-1">Estratégia: {aiRecs[ex.name].weight}kg Extra</p>
+                                                        <p className="opacity-80">"{aiRecs[ex.name].reason}"</p>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        )}
+
+                                        <div className="space-y-2">
+                                            <div className="grid grid-cols-4 gap-1 text-[7px] font-black text-slate-400 uppercase text-center mb-1 tracking-widest">
+                                                <span>Set</span><span>Reps/Seg</span><span>Carga Extra</span><span>RPE</span>
+                                            </div>
+                                            {ex.sets.map((set, idx) => (
+                                                <div key={set.setId} className="flex gap-2 items-center bg-slate-50 dark:bg-slate-800/50 p-2 rounded-2xl border border-slate-100 dark:border-slate-800">
+                                                    <span className="w-4 text-[10px] font-black text-slate-300 text-center">{idx + 1}</span>
+                                                    <div className="flex-1 flex bg-white dark:bg-slate-900 rounded-lg overflow-hidden border border-slate-200 dark:border-slate-700">
+                                                        <input type="number" className="w-full p-2 text-center text-xs font-black bg-transparent outline-none" value={set.reps} onChange={e => {
+                                                            const val = e.target.value;
+                                                            setCurrentLog(prev => ({...prev, exercises: prev.exercises.map(item => item.id === ex.id ? {...item, sets: item.sets.map(s => s.setId === set.setId ? {...s, reps: val} : s)} : item)}));
+                                                        }}/>
+                                                        <button onClick={() => {
+                                                            const unit = set.unit === 'reps' ? 's' : 'reps';
+                                                            setCurrentLog(prev => ({...prev, exercises: prev.exercises.map(item => item.id === ex.id ? {...item, sets: item.sets.map(s => s.setId === set.setId ? {...s, unit} : s)} : item)}));
+                                                        }} className="px-1.5 text-[7px] font-black bg-slate-100 dark:bg-slate-800 text-slate-500">{set.unit === 's' ? 'SEG' : 'REP'}</button>
+                                                    </div>
+                                                    <input type="number" className="flex-1 bg-blue-50 dark:bg-blue-900/10 p-2 rounded-xl text-center text-xs font-black text-blue-600 outline-none border border-blue-100 dark:border-blue-900/30" value={set.weight} onChange={e => {
+                                                        const val = e.target.value;
+                                                        setCurrentLog(prev => ({...prev, exercises: prev.exercises.map(item => item.id === ex.id ? {...item, sets: item.sets.map(s => s.setId === set.setId ? {...s, weight: val} : s)} : item)}));
+                                                    }}/>
+                                                    <input type="number" className="flex-1 bg-orange-50 dark:bg-orange-900/10 p-2 rounded-xl text-center text-xs font-black text-orange-600 outline-none border border-orange-100 dark:border-orange-900/30" value={set.rpe} onChange={e => {
+                                                        const val = e.target.value;
+                                                        setCurrentLog(prev => ({...prev, exercises: prev.exercises.map(item => item.id === ex.id ? {...item, sets: item.sets.map(s => s.setId === set.setId ? {...s, rpe: val} : s)} : item)}));
+                                                    }}/>
+                                                </div>
+                                            ))}
+                                        </div>
+                                        <button onClick={() => {
+                                            const last = ex.sets[ex.sets.length-1];
+                                            setCurrentLog(prev => ({...prev, exercises: prev.exercises.map(item => item.id === ex.id ? {...item, sets: [...item.sets, {...last, setId: Date.now()}]} : item)}));
+                                        }} className="w-full mt-1 py-2.5 text-[9px] font-black text-blue-600 bg-blue-50 dark:bg-blue-900/20 rounded-2xl uppercase tracking-widest border border-dashed border-blue-200">+ Adicionar Série</button>
+                                    </div>
+                                );
+                            })}
+
+                            {/* Exercise Selector */}
+                            <div className="grid grid-cols-2 gap-3 pb-8">
+                                {Object.keys(EXERCISE_DB).map(cat => (
+                                    <div key={cat} className="space-y-2">
+                                        <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest ml-1">{cat}</p>
+                                        <div className="flex flex-col gap-1.5">
+                                            {EXERCISE_DB[cat].map(e => (
+                                                <button key={e} onClick={() => addExercise(e)} className="w-full text-left p-3.5 text-[10px] font-bold bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-[1.5rem] shadow-sm hover:border-blue-500 active:scale-95 transition-all">+ {e}</button>
+                                            ))}
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+
+                            <button onClick={saveWorkout} className="w-full py-5 bg-blue-600 text-white rounded-[2.5rem] font-black uppercase tracking-widest shadow-2xl active:scale-95 transition-all">Finalizar e Guardar</button>
+                        </div>
+                    )}
+
+                    {view === 'weight' && (
+                        <div className="space-y-6 animate-in">
+                            <h2 className="text-xl font-black uppercase tracking-tight px-1">Peso Corporal</h2>
+                            <div className="bg-blue-600 p-12 rounded-[3.5rem] text-center text-white shadow-2xl relative overflow-hidden">
+                                <Icon name="scale" size={160} className="absolute -right-8 -bottom-8 opacity-10" />
+                                <p className="text-xs font-bold uppercase tracking-widest opacity-60 mb-2">Impacto Real no Treino</p>
+                                <h3 className="text-7xl font-black tracking-tighter">{currentWeight}<span className="text-2xl ml-1">kg</span></h3>
+                            </div>
+                            <div className="flex gap-3 px-1">
+                                <input type="number" step="0.1" className="flex-1 p-5 rounded-[2.5rem] bg-white dark:bg-slate-900 border-2 border-slate-100 dark:border-slate-800 font-black text-3xl text-center focus:border-blue-500 outline-none" placeholder="00.0" value={weightInput} onChange={e => setWeightInput(e.target.value)} />
+                                <button onClick={async () => {
+                                    const data = { id: Date.now(), date: new Date().toISOString().split('T')[0], value: parseFloat(weightInput) };
+                                    if(user.uid !== "local-user") {
+                                        await firebase.firestore().collection('artifacts').doc(window.__app_id || 'treino-master-v14').collection('users').doc(user.uid).collection('weights').doc(data.id.toString()).set(data);
+                                    }
+                                    setWeightInput('');
+                                }} className="px-10 bg-blue-600 text-white rounded-[2.5rem] font-black uppercase shadow-lg active:scale-95 transition-all">SALVAR</button>
+                            </div>
+                            <div className="space-y-2 px-1">
+                                {weightLogs.map(log => (
+                                    <div key={log.id} className="flex justify-between p-5 bg-white dark:bg-slate-900 rounded-[1.5rem] border border-slate-100 dark:border-slate-800 shadow-sm">
+                                        <span className="text-xs font-bold text-slate-400 uppercase">{new Date(log.date).toLocaleDateString()}</span>
+                                        <span className="font-black text-lg">{log.value} kg</span>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+
+                    {view === 'prs' && (
+                        <div className="space-y-6 animate-in">
+                            <div className="flex items-center gap-4 px-1">
+                                <button onClick={() => setView('dashboard')} className="p-2 bg-slate-100 dark:bg-slate-800 rounded-xl active:scale-90"><Icon name="chevron"/></button>
+                                <h1 className="text-xl font-black uppercase tracking-tight">Recordes Pessoais 🏆</h1>
+                            </div>
+                            <div className="grid gap-3 px-1">
+                                {Object.entries(workouts.flatMap(w => w.exercises || []).reduce((acc, ex) => {
+                                    const bwMult = getBwMult(ex.name);
+                                    const base = bwMult * currentWeight;
+                                    const max = ex.sets?.reduce((m, s) => Math.max(m, base + Number(s.weight)), 0) || 0;
+                                    if(!acc[ex.name] || max > acc[ex.name]) acc[ex.name] = max;
+                                    return acc;
+                                }, {})).sort((a,b) => b[1] - a[1]).map(([name, weight]) => (
+                                    <div key={name} className="flex justify-between items-center p-6 bg-white dark:bg-slate-900 rounded-[2rem] border-l-4 border-yellow-400 shadow-sm group">
+                                        <span className="font-bold text-sm text-slate-700 dark:text-slate-200">{name}</span>
+                                        <span className="font-black text-xl text-slate-900 dark:text-white group-hover:text-yellow-500 transition-colors">{weight.toFixed(1)} <small className="text-[10px] text-slate-400 uppercase">KG</small></span>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Navbar */}
+                    <nav className="fixed bottom-8 left-1/2 -translate-x-1/2 w-[calc(100%-2rem)] max-w-lg bg-white/90 dark:bg-slate-900/90 glass border border-slate-200/50 dark:border-slate-800/50 rounded-[3.5rem] shadow-2xl p-3 flex justify-around items-center z-50">
+                        <button onClick={() => setView('dashboard')} className={`p-4 rounded-full transition-all ${view === 'dashboard' ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-400'}`}><Icon name="dashboard" size={24}/></button>
+                        <button onClick={() => {
+                            setCurrentLog({ date: new Date().toISOString().split('T')[0], type: '', exercises: [] });
+                            setView('log-workout');
+                        }} className="p-6 bg-blue-600 text-white rounded-full -translate-y-8 shadow-2xl active:scale-110 active:rotate-12 transition-all"><Icon name="plus" size={32}/></button>
+                        <button onClick={() => setView('weight')} className={`p-4 rounded-full transition-all ${view === 'weight' ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-400'}`}><Icon name="scale" size={24}/></button>
+                    </nav>
+                </div>
+            );
+        }
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
