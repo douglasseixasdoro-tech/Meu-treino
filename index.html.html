@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Treino Master - Coach IA Pro</title>
+    <!-- Bibliotecas Essenciais -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    
+    <!-- Firebase SDK (Versão Compat para facilidade de uso em ficheiro único) -->
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800;900&display=swap');
+        body { 
+            font-family: 'Inter', sans-serif; 
+            -webkit-tap-highlight-color: transparent;
+            overscroll-behavior-y: contain;
+        }
+        .scrollbar-hide::-webkit-scrollbar { display: none; }
+        .animate-in { animation: slideUp 0.4s ease-out forwards; }
+        @keyframes slideUp { from { transform: translateY(10px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+        input[type="number"] { -moz-appearance: textfield; }
+        input::-webkit-outer-spin-button, input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+        .tab-bar { backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); }
+    </style>
+</head>
+<body class="bg-slate-50 dark:bg-slate-950">
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect, useMemo } = React;
+
+        // --- BASE DE DADOS OFICIAL (Extraída das tuas planilhas) ---
+        const EXERCISE_DATABASE = {
+            "Superior A": [
+                { name: "Floor YTW", target: "2x10", weight: 0 },
+                { name: "Supino Halteres", target: "3x10", weight: 45 },
+                { name: "Standard Push-up", target: "3x12", weight: 0 },
+                { name: "Desenvolvimento Ombros", target: "3x10", weight: 35 },
+                { name: "Tríceps Corda", target: "3x12", weight: 50 }
+            ],
+            "Inferior A": [
+                { name: "Agachamento Livre", target: "3x10", weight: 20 },
+                { name: "Leg Press", target: "3x12", weight: 70 },
+                { name: "Cadeira Extensora", target: "3x12", weight: 30 },
+                { name: "Panturrilha Sentado", target: "4x15", weight: 40 }
+            ],
+            "Superior B": [
+                { name: "Puxada Alta", target: "3x10", weight: 40 },
+                { name: "Remada Curvada", target: "3x10", weight: 55 },
+                { name: "Bíceps Rosca Direta", target: "3x12", weight: 15 },
+                { name: "Face Pull", target: "3x15", weight: 15 }
+            ],
+            "Inferior B": [
+                { name: "Stiff", target: "3x10", weight: 40 },
+                { name: "Cadeira Flexora", target: "3x12", weight: 35 },
+                { name: "Agachamento Sumô", target: "3x12", weight: 25 },
+                { name: "Plank", target: "3x60s", weight: 0 }
+            ]
+        };
+
+        const ROTINA_SEMANAL = {
+            "Segunda": "Superior A", "Terça": "Inferior A", "Quarta": "Superior B",
+            "Quinta": "Inferior B", "Sexta": "Superior A", "Sábado": "Cardio", "Domingo": "Descanso"
+        };
+
+        // --- COMPONENTE DE ÍCONE ---
+        const Icon = ({ name, size = 20, className = "" }) => {
+            const icons = {
+                dashboard: <path d="M3 3h7v9H3V3zm11 0h7v5h-7V3zm0 9h7v9h-7v-9zM3 16h7v5H3v-5z"/>,
+                plus: <path d="M12 5v14M5 12h14"/>,
+                scale: <path d="M16 16c3.314 0 6-2.686 6-6V4h-4v6c0 1.105-.895 2-2 2s-2-.895-2-2V4h-4v6c0 3.314 2.686 6 6 6zM6 16c-3.314 0-6-2.686-6-6V4h4v6c0 1.105.895 2 2 2s2-.895 2-2V4h4v6c0 3.314-2.686 6-6 6zM12 22v-6"/>,
+                trophy: <path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6m12 5h1.5a2.5 2.5 0 0 0 0-5H18M12 22h4m-8 0h4m0 0V13m0 0a4 4 0 0 1-4-4V4h8v5a4 4 0 0 1-4 4z"/>,
+                brain: <path d="M9.5 2A5.5 5.5 0 0 0 4 7.5c0 1.63.71 3.1 1.83 4.12.56.51.85 1.25.77 2L6.23 17a2 2 0 0 0 2 2.33h7.54a2 2 0 0 0 2-2.33l-.37-3.38c-.08-.75.21-1.49.77-2a5.5 5.5 0 1 0-8.67-7.62zM9 13l3-3 3 3M12 10v10"/>,
+                trash: <path d="M3 6h18m-2 0v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>,
+                chevronLeft: <path d="M15 18l-6-6 6-6"/>,
+                zap: <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>
+            };
+            return (
+                <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className={className}>
+                    {icons[name] || null}
+                </svg>
+            );
+        };
+
+        // --- COMPONENTE PRINCIPAL ---
+        function App() {
+            const [view, setView] = useState('dashboard');
+            const [user, setUser] = useState(null);
+            const [workouts, setWorkouts] = useState([]);
+            const [weightLogs, setWeightLogs] = useState([{ id: 1, date: "2026-05-04", value: 94.6 }]);
+            const [weightInput, setWeightInput] = useState('');
+            const [isSyncing, setIsSyncing] = useState(false);
+            const [aiLoading, setAiLoading] = useState(false);
+            const [dailyPlan, setDailyPlan] = useState(null);
+            const [aiRecs, setAiRecs] = useState({});
+
+            const [currentLog, setCurrentLog] = useState({
+                date: new Date().toISOString().split('T')[0],
+                type: '',
+                exercises: []
+            });
+
+            // Inicialização Firebase
+            useEffect(() => {
+                const config = window.__firebase_config ? JSON.parse(window.__firebase_config) : { apiKey: "" };
+                if (config.apiKey && typeof firebase !== 'undefined') {
+                    if (!firebase.apps.length) firebase.initializeApp(config);
+                    firebase.auth().signInAnonymously().catch(console.error);
+                    firebase.auth().onAuthStateChanged(u => {
+                        setUser(u);
+                        if(u) syncData(u.uid);
+                    });
+                } else {
+                    setUser({ uid: "local-user" });
+                    setWorkouts([]); // Mock vazio inicial
+                }
+            }, []);
+
+            const syncData = (uid) => {
+                const appId = window.__app_id || 'treino-master-v13';
+                setIsSyncing(true);
+                const db = firebase.firestore();
+                
+                db.collection('artifacts').doc(appId).collection('users').doc(uid).collection('workouts')
+                    .onSnapshot(s => {
+                        const data = s.docs.map(d => d.data()).sort((a,b) => new Date(b.date) - new Date(a.date));
+                        setWorkouts(data);
+                        setIsSyncing(false);
+                    }, () => setIsSyncing(false));
+
+                db.collection('artifacts').doc(appId).collection('users').doc(uid).collection('weights')
+                    .onSnapshot(s => {
+                        const data = s.docs.map(d => d.data()).sort((a,b) => new Date(b.date) - new Date(a.date));
+                        if(data.length > 0) setWeightLogs(data);
+                    });
+            };
+
+            const currentWeight = useMemo(() => Number(weightLogs[0]?.value) || 94.6, [weightLogs]);
+
+            // --- IA COACH (Gemini API) ---
+            const askCoach = async (prompt, system) => {
+                const apiKey = ""; // Chave injetada no runtime
+                try {
+                    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            contents: [{ parts: [{ text: prompt }] }],
+                            systemInstruction: { parts: [{ text: system }] }
+                        })
+                    });
+                    const data = await response.json();
+                    
+                    // Proteção contra erro de candidatos undefined
+                    if (!data.candidates || data.candidates.length === 0) return null;
+                    
+                    const text = data.candidates[0].content.parts[0].text;
+                    return text ? text.replace(/
