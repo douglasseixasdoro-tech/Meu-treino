@@ -1,245 +1,98 @@
 <!DOCTYPE html>
-<html lang="pt-br">
+<html lang="pt-BR">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-  <title>Treino Nuvem</title>
-  <link rel="stylesheet" href="styles.css">
-  <link rel="manifest" href="manifest.webmanifest">
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Treino Nuvem</title>
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#121212">
+    <link rel="stylesheet" href="style.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
 </head>
 <body>
+    <header class="app-header">
+        <h1>☁️ Treino Nuvem</h1>
+    </header>
 
-  <header class="topbar">
-    <button id="menuOpenBtn" class="menu-button ghost" aria-label="Abrir menu">☰</button>
-    <h1>Treino Nuvem</h1>
-  </header>
+    <main class="app-content">
+        <!-- Dashboard View -->
+        <section id="view-dashboard" class="view active">
+            <h2>Resumo de Evolução</h2>
+            <div class="card">
+                <canvas id="evolutionChart"></canvas>
+            </div>
+            <h3>Últimos Treinos</h3>
+            <div id="recent-workouts-list"></div>
+        </section>
 
-  <div id="menuOverlay" class="menu-overlay" hidden></div>
-  <nav id="appMenu" class="app-menu" aria-hidden="true">
-    <div class="menu-head">
-      <div>
-        <p class="eyebrow">Menu</p>
-        <h2>Navegação</h2>
-      </div>
-      <button id="menuCloseBtn" class="icon ghost">×</button>
-    </div>
+        <!-- Treinar View -->
+        <section id="view-train" class="view">
+            <h2>Iniciar Treino</h2>
+            <div id="routine-selector" class="card">
+                <p>Selecione uma rotina:</p>
+                <select id="routine-select">
+                    <option value="">Carregando rotinas...</option>
+                </select>
+                <button id="btn-start-workout" class="btn primary">Começar</button>
+            </div>
+            
+            <div id="active-workout" class="hidden">
+                <h3 id="active-workout-name"></h3>
+                <div id="workout-exercises"></div>
+                <button id="btn-finish-workout" class="btn success" style="width: 100%; margin-top: 20px;">Finalizar e Salvar Treino</button>
+                <button id="btn-cancel-workout" class="btn danger" style="width: 100%; margin-top: 10px;">Cancelar</button>
+            </div>
+        </section>
 
-    <div class="menu-section">
-      <button class="menu-link" data-tab="routine">📋 Meus Treinos</button>
-      <button class="menu-link" data-tab="session">🚀 Iniciar Sessão</button>
-      <button class="menu-link" data-tab="dashboard">📈 Dashboard</button>
-      <button class="menu-link" data-tab="measures">📏 Medidas</button>
-      <button class="menu-link" data-tab="catalog">📚 Catálogo</button>
-      <button class="menu-link" data-tab="ai">🤖 Analista IA</button>
-      <button class="menu-link" data-tab="settings">⚙️ Configurações</button>
-    </div>
+        <!-- Histórico View -->
+        <section id="view-history" class="view">
+            <h2>Histórico Completo</h2>
+            <div id="history-list"></div>
+        </section>
 
-    <div class="menu-section">
-      <p class="eyebrow">Dados</p>
-      <button id="exportJsonBtn" class="menu-link ghost">Exportar JSON</button>
-      <label class="file-label ghost">
-        Importar JSON
-        <input type="file" id="importJsonInput" accept=".json">
-      </label>
-      <button id="clearAllDataBtn" class="menu-link danger">Apagar Tudo</button>
-    </div>
-  </nav>
+        <!-- Config View -->
+        <section id="view-config" class="view">
+            <h2>Configurações e Dados</h2>
+            <div class="card">
+                <h3>Gerenciar Dados</h3>
+                <p>Importe seu backup JSON para restaurar rotinas e histórico.</p>
+                <input type="file" id="file-import" accept=".json" style="display: none;">
+                <button class="btn secondary" onclick="document.getElementById('file-import').click()">Importar Backup (JSON)</button>
+                <br><br>
+                <button id="btn-export" class="btn primary">Exportar Backup (JSON)</button>
+                <br><br>
+                <button id="btn-clear-data" class="btn danger">Apagar Tudo</button>
+            </div>
+        </section>
+    </main>
 
-  <main class="layout">
-    <div class="tabs" role="tablist">
-      <button class="tab active" data-tab="routine">Treinos</button>
-      <button class="tab" data-tab="session">Sessão</button>
-      <button class="tab" data-tab="dashboard">Progresso</button>
-      <button class="tab" data-tab="measures">Medidas</button>
-    </div>
+    <nav class="bottom-nav">
+        <button class="nav-item active" data-target="view-dashboard">
+            <i class="fas fa-chart-line"></i>
+            <span>Início</span>
+        </button>
+        <button class="nav-item" data-target="view-train">
+            <i class="fas fa-dumbbell"></i>
+            <span>Treinar</span>
+        </button>
+        <button class="nav-item" data-target="view-history">
+            <i class="fas fa-history"></i>
+            <span>Histórico</span>
+        </button>
+        <button class="nav-item" data-target="view-config">
+            <i class="fas fa-cog"></i>
+            <span>Config</span>
+        </button>
+    </nav>
 
-    <section id="routine" class="panel active">
-      <div class="section-head">
-        <div>
-          <p class="eyebrow">Estrutura</p>
-          <h2>Minha Rotina</h2>
-        </div>
-        <button id="addWorkoutBtn" class="primary">+ Novo Treino</button>
-      </div>
-      <div id="workoutList" class="stack"></div>
-    </section>
-
-    <section id="session" class="panel">
-      <div class="section-head">
-        <div>
-          <p class="eyebrow">Registro</p>
-          <h2>Treinar Agora</h2>
-        </div>
-        <button id="saveSessionBtn" class="primary">Finalizar</button>
-      </div>
-      
-      <div class="form-grid">
-        <label>
-          Qual treino?
-          <select id="sessionWorkout"></select>
-        </label>
-        <label>
-          Data
-          <input type="date" id="sessionDate">
-        </label>
-      </div>
-
-      <div id="sessionExercises" class="stack"></div>
-    </section>
-
-    <section id="dashboard" class="panel">
-      <div class="section-head">
-        <div>
-          <p class="eyebrow">Estatísticas</p>
-          <h2>Visão Geral</h2>
-        </div>
-      </div>
-
-      <div id="dashboardStats" class="dashboard-grid"></div>
-
-      <div class="stack" style="margin-top: 32px;">
-        <h3>Evolução de Carga</h3>
-        <select id="dashboardExercise"></select>
-        <div id="exerciseChart" class="chart-container"></div>
-        <div id="exerciseTimeline" class="timeline"></div>
-      </div>
-
-      <div class="stack" style="margin-top: 32px;">
-        <h3>Recordes Pessoais</h3>
-        <div id="recordsList" class="records-list"></div>
-      </div>
-
-      <div class="history">
-        <h3>Últimas Sessões</h3>
-        <div id="sessionHistory"></div>
-      </div>
-    </section>
-
-    <section id="measures" class="panel">
-      <div class="section-head">
-        <div>
-          <p class="eyebrow">Composição</p>
-          <h2>Corpo e Medidas</h2>
-        </div>
-        <button id="saveMeasureBtn" class="primary">Salvar</button>
-      </div>
-
-      <div class="form-grid">
-        <label>Data <input type="date" id="measureDate"></label>
-        <label>Peso (kg) <input type="number" id="mWeight" step="0.1"></label>
-        <label>Cintura (cm) <input type="number" id="mWaist" step="0.1"></label>
-        <label>Peito (cm) <input type="number" id="mChest" step="0.1"></label>
-        <label>Braço (cm) <input type="number" id="mArm" step="0.1"></label>
-        <label>Perna (cm) <input type="number" id="mLeg" step="0.1"></label>
-      </div>
-      <label>Notas <textarea id="mNotes"></textarea></label>
-
-      <div class="history">
-        <h3>Histórico de Medidas</h3>
-        <div id="measureHistory"></div>
-      </div>
-    </section>
-
-    <section id="catalog" class="panel">
-      <div class="section-head">
-        <div>
-          <p class="eyebrow">Biblioteca</p>
-          <h2>Exercícios</h2>
-        </div>
-      </div>
-
-      <div class="workout-card">
-        <h3>Adicionar ao Catálogo</h3>
-        <div class="form-grid" style="margin-top: 12px;">
-          <label>Nome <input type="text" id="catName"></label>
-          <label>Grupo <input type="text" id="catMuscle"></label>
-          <label>Descanso (s) <input type="number" id="catRest" value="60"></label>
-        </div>
-        <label>Notas/Link <input type="text" id="catNotes" style="width:100%; margin-bottom:12px;"></label>
-        <button id="addCatalogExerciseBtn" class="ghost" style="width:100%">Salvar no Catálogo</button>
-      </div>
-
-      <div id="exerciseCatalogList" class="stack" style="margin-top:24px;"></div>
-    </section>
-
-    <section id="ai" class="panel">
-      <div class="section-head">
-        <div>
-          <p class="eyebrow">Gemini</p>
-          <h2>Analista de Treino</h2>
-        </div>
-      </div>
-      <p class="hint">Copie o prompt abaixo e cole no Gemini para uma análise profunda dos seus dados.</p>
-      
-      <div class="stack" style="margin-top:20px;">
-        <label>Instrução Extra para a IA <input type="text" id="aiExtraInstruction" placeholder="Ex: Foco em hipertrofia de ombros"></label>
-        <button id="buildPromptBtn" class="primary">Gerar Prompt de Análise</button>
-        <textarea id="geminiPrompt" readonly style="height: 200px; font-family: monospace; font-size: 12px;"></textarea>
-      </div>
-    </section>
-
-    <section id="settings" class="panel">
-      <div class="section-head">
-        <div>
-          <p class="eyebrow">Sistema</p>
-          <h2>Configurações</h2>
-        </div>
-      </div>
-      
-      <div class="stack">
-        <div class="workout-card">
-          <h3>Importar Planilha (CSV)</h3>
-          <p class="hint">Selecione um arquivo CSV para visualizar os dados.</p>
-          <input type="file" id="importCsvInput" accept=".csv" style="margin: 12px 0;">
-          <div id="csvPreview" class="history"></div>
-        </div>
-
-        <div class="workout-card">
-          <h3>Colar Tabela</h3>
-          <p class="hint">Cole dados copiados do Excel/Sheets aqui.</p>
-          <textarea id="pastedTable" placeholder="Cole aqui..."></textarea>
-          <button id="importPastedTableBtn" class="ghost" style="width:100%; margin-top:12px;">Processar Tabela</button>
-        </div>
-
-        <div class="workout-card">
-          <h3>Exportar para Planilha</h3>
-          <div class="form-grid" style="margin-top: 12px;">
-            <button id="exportSessionsCsv" class="ghost">Treinos (CSV)</button>
-            <button id="exportMeasuresCsv" class="ghost">Medidas (CSV)</button>
-            <button id="exportRoutineCsv" class="ghost">Rotina (CSV)</button>
-            <button id="exportCatalogCsv" class="ghost">Catálogo (CSV)</button>
-          </div>
-          <button id="exportWorkbookBtn" class="primary" style="width:100%; margin-top:12px;">Exportar Excel (.xlsx)</button>
-        </div>
-
-        <button id="clearAllDataSheetBtn" class="danger" style="width:100%">Resetar Todos os Dados</button>
-      </div>
-    </section>
-  </main>
-
-  <template id="workoutTemplate">
-    <div class="workout-card">
-      <input type="text" class="workout-name" placeholder="Nome do Treino">
-      <div class="exercise-list"></div>
-      <div class="section-head" style="margin:0; padding-top:16px;">
-        <button class="add-exercise ghost">+ Exercício</button>
-        <button class="delete-workout icon danger">🗑</button>
-      </div>
-    </div>
-  </template>
-
-  <template id="exerciseTemplate">
-    <div class="exercise-item">
-      <input type="text" class="ex-name" placeholder="Exercício">
-      <input type="number" class="ex-sets" placeholder="Sets">
-      <input type="text" class="ex-reps" placeholder="Reps">
-      <button class="delete-exercise icon ghost">×</button>
-    </div>
-  </template>
-
-  <script src="app.js"></script>
+    <script src="app.js"></script>
+    <script>
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register('sw.js').then(() => {
+                console.log('Service Worker Registrado');
+            });
+        }
+    </script>
 </body>
 </html>
